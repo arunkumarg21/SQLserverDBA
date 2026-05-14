@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Azure VM Inventory Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #0a0e14;
+  --bg-elev: #0f141c;
+  --bg-card: #121922;
+  --bg-hover: #1a2330;
+  --border: #1f2937;
+  --border-strong: #2d3748;
+  --text: #e5e7eb;
+  --text-dim: #9ca3af;
+  --text-faint: #6b7280;
+  --mint: #34d399;
+  --cyan: #22d3ee;
+  --amber: #fbbf24;
+  --rose: #fb7185;
+  --violet: #a78bfa;
+  --orange: #fb923c;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: var(--bg); color: var(--text); font-family: 'IBM Plex Sans', sans-serif; font-weight: 400; -webkit-font-smoothing: antialiased; }
+body {
+  background-image:
+    radial-gradient(circle at 20% 10%, rgba(52,211,153,0.06), transparent 40%),
+    radial-gradient(circle at 80% 80%, rgba(167,139,250,0.05), transparent 40%);
+  min-height: 100vh;
+}
+.mono { font-family: 'IBM Plex Mono', monospace; }
+
+/* Header */
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 28px; border-bottom: 1px solid var(--border);
+  background: rgba(10,14,20,0.85); backdrop-filter: blur(12px);
+  position: sticky; top: 0; z-index: 50;
+}
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand-mark {
+  width: 32px; height: 32px; border-radius: 6px;
+  background: linear-gradient(135deg, var(--mint), var(--cyan));
+  display: grid; place-items: center; color: #052e1f; font-weight: 700;
+  font-family: 'IBM Plex Mono', monospace; font-size: 14px;
+}
+.brand h1 { font-size: 14px; font-weight: 600; letter-spacing: 0.3px; }
+.brand-sub { font-size: 11px; color: var(--text-faint); font-family: 'IBM Plex Mono', monospace; letter-spacing: 1.2px; text-transform: uppercase; }
+.header-right { display: flex; align-items: center; gap: 16px; font-size: 12px; color: var(--text-dim); }
+.dot { display:inline-block; width:6px; height:6px; border-radius:50%; background: var(--text-faint); }
+.dot.live { background: var(--mint); box-shadow: 0 0 8px var(--mint); animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+/* Main */
+main { padding: 24px 28px 60px; max-width: 1600px; margin: 0 auto; }
+
+/* Drop zone */
+.drop-zone {
+  border: 2px dashed var(--border-strong);
+  border-radius: 12px;
+  padding: 80px 40px;
+  text-align: center;
+  background: var(--bg-elev);
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-bottom: 28px;
+}
+.drop-zone:hover, .drop-zone.dragover {
+  border-color: var(--mint);
+  background: rgba(52,211,153,0.04);
+}
+.drop-zone .icon {
+  width: 56px; height: 56px; margin: 0 auto 20px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(52,211,153,0.15), rgba(34,211,238,0.1));
+  display: grid; place-items: center;
+  font-size: 28px;
+}
+.drop-zone h2 { font-size: 18px; font-weight: 500; margin-bottom: 6px; }
+.drop-zone p { color: var(--text-dim); font-size: 13px; margin-bottom: 18px; }
+.drop-zone .formats { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--text-faint); letter-spacing: 0.5px; }
+.btn-primary {
+  display: inline-block; padding: 10px 22px; border-radius: 6px;
+  background: var(--mint); color: #052e1f; font-weight: 600; font-size: 13px;
+  border: none; cursor: pointer; font-family: inherit;
+}
+.btn-secondary {
+  padding: 8px 14px; border-radius: 6px; background: var(--bg-card); color: var(--text);
+  border: 1px solid var(--border-strong); font-size: 12px; cursor: pointer; font-family: inherit;
+}
+.btn-secondary:hover { border-color: var(--mint); }
+
+.hidden { display: none !important; }
+
+/* KPI strip */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.kpi {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 16px 18px;
+  position: relative; overflow: hidden;
+}
+.kpi::before {
+  content: ''; position: absolute; top: 0; left: 0; height: 2px; width: 100%;
+  background: var(--accent, var(--mint)); opacity: 0.7;
+}
+.kpi-label { font-size: 10px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 1.5px; font-family: 'IBM Plex Mono', monospace; margin-bottom: 8px; }
+.kpi-value { font-size: 28px; font-weight: 600; font-family: 'IBM Plex Mono', monospace; letter-spacing: -0.5px; }
+.kpi-sub { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+
+/* Filter bar */
+.filter-bar {
+  display: flex; gap: 10px; flex-wrap: wrap; padding: 14px 16px;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+  margin-bottom: 20px; align-items: center;
+}
+.filter-bar label { font-size: 10px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 1px; font-family: 'IBM Plex Mono', monospace; }
+.filter-bar select, .filter-bar input {
+  background: var(--bg-elev); border: 1px solid var(--border-strong);
+  color: var(--text); padding: 7px 10px; border-radius: 5px;
+  font-family: inherit; font-size: 12px; min-width: 140px;
+}
+.filter-bar select:focus, .filter-bar input:focus { outline: none; border-color: var(--mint); }
+.filter-group { display: flex; flex-direction: column; gap: 4px; }
+.filter-actions { margin-left: auto; display: flex; gap: 8px; }
+
+/* Charts grid */
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 18px;
+}
+.card-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px; }
+.card-title { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-dim); font-family: 'IBM Plex Mono', monospace; }
+.card-meta { font-size: 11px; color: var(--text-faint); font-family: 'IBM Plex Mono', monospace; }
+.chart-wrap { position: relative; height: 240px; }
+
+/* Table */
+.table-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 18px; }
+.table-controls { display: flex; gap: 12px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+.search-input {
+  flex: 1; min-width: 200px;
+  background: var(--bg-elev); border: 1px solid var(--border-strong);
+  color: var(--text); padding: 8px 12px; border-radius: 6px;
+  font-family: 'IBM Plex Mono', monospace; font-size: 12px;
+}
+.table-wrap { overflow-x: auto; border-radius: 6px; border: 1px solid var(--border); max-height: 560px; overflow-y: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+thead { position: sticky; top: 0; background: var(--bg-elev); z-index: 1; }
+th {
+  text-align: left; padding: 10px 12px; font-weight: 500;
+  font-size: 10px; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--text-dim); border-bottom: 1px solid var(--border-strong);
+  font-family: 'IBM Plex Mono', monospace; white-space: nowrap; cursor: pointer; user-select: none;
+}
+th:hover { color: var(--mint); }
+th .sort-arrow { font-size: 9px; opacity: 0.5; margin-left: 4px; }
+td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-family: 'IBM Plex Mono', monospace; white-space: nowrap; }
+tbody tr:hover { background: var(--bg-hover); }
+.pill {
+  display: inline-block; padding: 2px 8px; border-radius: 4px;
+  font-size: 10px; font-weight: 500; letter-spacing: 0.5px; text-transform: uppercase;
+}
+.pill-ok { background: rgba(52,211,153,0.12); color: var(--mint); }
+.pill-warn { background: rgba(251,191,36,0.12); color: var(--amber); }
+.pill-err { background: rgba(251,113,133,0.12); color: var(--rose); }
+.pill-neutral { background: rgba(156,163,175,0.12); color: var(--text-dim); }
+.pill-info { background: rgba(34,211,238,0.12); color: var(--cyan); }
+
+/* Tabs */
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+.tab {
+  padding: 10px 18px; cursor: pointer; font-size: 12px; color: var(--text-dim);
+  border-bottom: 2px solid transparent; font-family: 'IBM Plex Mono', monospace;
+  text-transform: uppercase; letter-spacing: 1px;
+}
+.tab.active { color: var(--mint); border-bottom-color: var(--mint); }
+.tab:hover:not(.active) { color: var(--text); }
+
+.empty-msg { color: var(--text-faint); text-align: center; padding: 40px; font-size: 13px; }
+
+footer { padding: 20px 28px; text-align: center; font-size: 11px; color: var(--text-faint); font-family: 'IBM Plex Mono', monospace; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="brand-mark">AZ</div>
+    <div>
+      <h1>AZURE VM INVENTORY CONSOLE</h1>
+      <div class="brand-sub">v1.0 // local-only / no data leaves browser</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <span><span class="dot" id="statusDot"></span> <span id="statusText">No data loaded</span></span>
+    <button class="btn-secondary" id="resetBtn" style="display:none">Reset</button>
+  </div>
+</header>
+
+<main>
+
+  <!-- Drop zone -->
+  <div id="dropZone" class="drop-zone">
+    <div class="icon">⤴</div>
+    <h2>Drop inventory file to begin</h2>
+    <p>Upload the <span class="mono">.xlsx</span> from the inventory script, or any <span class="mono">VMs.csv</span> with matching columns.</p>
+    <button class="btn-primary" id="chooseBtn">Choose File</button>
+    <input type="file" id="fileInput" class="hidden" accept=".xlsx,.xls,.csv" />
+    <div class="formats" style="margin-top:14px">SUPPORTED: .xlsx · .xls · .csv &nbsp;|&nbsp; Files processed entirely in-browser</div>
+  </div>
+
+  <!-- Dashboard (hidden until upload) -->
+  <div id="dashboard" class="hidden">
+
+    <!-- KPI strip -->
+    <div class="kpi-grid" id="kpiGrid"></div>
+
+    <!-- Filter bar -->
+    <div class="filter-bar">
+      <div class="filter-group">
+        <label>Subscription</label>
+        <select id="fSub"><option value="">All</option></select>
+      </div>
+      <div class="filter-group">
+        <label>Environment</label>
+        <select id="fEnv"><option value="">All</option></select>
+      </div>
+      <div class="filter-group">
+        <label>OS Type</label>
+        <select id="fOS"><option value="">All</option></select>
+      </div>
+      <div class="filter-group">
+        <label>Power State</label>
+        <select id="fPower"><option value="">All</option></select>
+      </div>
+      <div class="filter-group">
+        <label>Region</label>
+        <select id="fLoc"><option value="">All</option></select>
+      </div>
+      <div class="filter-actions">
+        <button class="btn-secondary" id="clearFilters">Clear filters</button>
+        <button class="btn-secondary" id="exportCsv">Export filtered CSV</button>
+      </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="charts-grid">
+      <div class="card">
+        <div class="card-header"><div class="card-title">VMs by Region</div><div class="card-meta" id="meta-region"></div></div>
+        <div class="chart-wrap"><canvas id="chartRegion"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">VMs by Size (top 8)</div><div class="card-meta" id="meta-size"></div></div>
+        <div class="chart-wrap"><canvas id="chartSize"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">OS Distribution</div></div>
+        <div class="chart-wrap"><canvas id="chartOS"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">Power State</div></div>
+        <div class="chart-wrap"><canvas id="chartPower"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">Backup Coverage</div></div>
+        <div class="chart-wrap"><canvas id="chartBackup"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">Top 10 Storage Consumers</div><div class="card-meta">GB total</div></div>
+        <div class="chart-wrap"><canvas id="chartStorage"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Detail Tabs -->
+    <div class="card">
+      <div class="tabs">
+        <div class="tab active" data-tab="vms">VMs</div>
+        <div class="tab" data-tab="disks">Disks</div>
+        <div class="tab" data-tab="sql">SQL Instances</div>
+      </div>
+
+      <div id="tab-vms">
+        <div class="table-controls">
+          <input class="search-input" id="searchVm" placeholder="Search VMs by name, hostname, IP, tags..." />
+          <span class="card-meta" id="vmCount"></span>
+        </div>
+        <div class="table-wrap"><table id="vmTable"></table></div>
+      </div>
+
+      <div id="tab-disks" class="hidden">
+        <div class="table-controls"><span class="card-meta" id="diskCount"></span></div>
+        <div class="table-wrap"><table id="diskTable"></table></div>
+      </div>
+
+      <div id="tab-sql" class="hidden">
+        <div class="table-controls"><span class="card-meta" id="sqlCount"></span></div>
+        <div class="table-wrap"><table id="sqlTable"></table></div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<footer>Everything runs locally in your browser. No data is uploaded or stored.</footer>
+
+<script>
+// ============================================================
+// State
+// ============================================================
+const state = {
+  vms: [],
+  disks: [],
+  sql: [],
+  charts: {},
+  sort: { col: null, dir: 1 }
+};
+
+// Color palette for charts
+const palette = ['#34d399','#22d3ee','#a78bfa','#fbbf24','#fb7185','#fb923c','#60a5fa','#f472b6','#4ade80','#facc15'];
+const gridColor = '#1f2937';
+const textColor = '#9ca3af';
+
+Chart.defaults.color = textColor;
+Chart.defaults.borderColor = gridColor;
+Chart.defaults.font.family = "'IBM Plex Sans', sans-serif";
+
+// ============================================================
+// File handling
+// ============================================================
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const chooseBtn = document.getElementById('chooseBtn');
+
+chooseBtn.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('click', (e) => { if (e.target.id !== 'chooseBtn') fileInput.click(); });
+fileInput.addEventListener('change', (e) => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+
+['dragenter','dragover'].forEach(ev => dropZone.addEventListener(ev, (e) => {
+  e.preventDefault(); e.stopPropagation(); dropZone.classList.add('dragover');
+}));
+['dragleave','drop'].forEach(ev => dropZone.addEventListener(ev, (e) => {
+  e.preventDefault(); e.stopPropagation(); dropZone.classList.remove('dragover');
+}));
+dropZone.addEventListener('drop', (e) => {
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  state.vms = []; state.disks = []; state.sql = [];
+  Object.values(state.charts).forEach(c => c.destroy());
+  state.charts = {};
+  document.getElementById('dashboard').classList.add('hidden');
+  document.getElementById('dropZone').classList.remove('hidden');
+  document.getElementById('resetBtn').style.display = 'none';
+  document.getElementById('statusDot').className = 'dot';
+  document.getElementById('statusText').textContent = 'No data loaded';
+  fileInput.value = '';
+});
+
+function handleFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, { type: 'array' });
+      // Find sheets - try common names
+      const sheetMap = {};
+      wb.SheetNames.forEach(name => sheetMap[name.toLowerCase()] = name);
+
+      // If multi-sheet xlsx: pull all three
+      const vmsSheet = sheetMap['vms'] || sheetMap['vm'] || sheetMap['inventory'] || wb.SheetNames[0];
+      state.vms = XLSX.utils.sheet_to_json(wb.Sheets[vmsSheet], { defval: '' });
+
+      if (sheetMap['disks'] || sheetMap['disk']) {
+        state.disks = XLSX.utils.sheet_to_json(wb.Sheets[sheetMap['disks'] || sheetMap['disk']], { defval: '' });
+      }
+      if (sheetMap['sql'] || sheetMap['mssql']) {
+        state.sql = XLSX.utils.sheet_to_json(wb.Sheets[sheetMap['sql'] || sheetMap['mssql']], { defval: '' });
+      }
+
+      if (state.vms.length === 0) throw new Error('No VM rows found.');
+      initDashboard();
+    } catch (err) {
+      alert('Could not parse file: ' + err.message);
+      console.error(err);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ============================================================
+// Helpers
+// ============================================================
+function num(v) { const n = parseFloat(v); return isNaN(n) ? 0 : n; }
+function getEnv(tags) {
+  if (!tags) return 'untagged';
+  const m = String(tags).match(/env\s*=\s*([^;,]+)/i);
+  return m ? m[1].trim().toLowerCase() : 'untagged';
+}
+function uniq(arr) { return [...new Set(arr.filter(v => v !== '' && v !== null && v !== undefined))].sort(); }
+function bool(v) {
+  if (v === true) return true; if (v === false) return false;
+  const s = String(v).toLowerCase().trim();
+  return s === 'true' || s === 'yes' || s === '1';
+}
+function fmt(n) { return n == null || isNaN(n) ? '—' : Number(n).toLocaleString(); }
+
+// ============================================================
+// Init
+// ============================================================
+function initDashboard() {
+  document.getElementById('dropZone').classList.add('hidden');
+  document.getElementById('dashboard').classList.remove('hidden');
+  document.getElementById('resetBtn').style.display = 'inline-block';
+  document.getElementById('statusDot').className = 'dot live';
+  document.getElementById('statusText').textContent = `${state.vms.length} VMs loaded`;
+
+  populateFilters();
+  attachFilterEvents();
+  renderAll();
+}
+
+function populateFilters() {
+  fill('fSub',   uniq(state.vms.map(v => v.Subscription)));
+  fill('fEnv',   uniq(state.vms.map(v => getEnv(v.Tags))));
+  fill('fOS',    uniq(state.vms.map(v => v.OSType)));
+  fill('fPower', uniq(state.vms.map(v => v.PowerState)));
+  fill('fLoc',   uniq(state.vms.map(v => v.Location)));
+}
+function fill(id, vals) {
+  const sel = document.getElementById(id);
+  vals.forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = v; sel.appendChild(o); });
+}
+
+function attachFilterEvents() {
+  ['fSub','fEnv','fOS','fPower','fLoc'].forEach(id => {
+    document.getElementById(id).addEventListener('change', renderAll);
+  });
+  document.getElementById('clearFilters').addEventListener('click', () => {
+    ['fSub','fEnv','fOS','fPower','fLoc'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('searchVm').value = '';
+    renderAll();
+  });
+  document.getElementById('searchVm').addEventListener('input', () => renderTable());
+  document.getElementById('exportCsv').addEventListener('click', exportFiltered);
+
+  // Tabs
+  document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    ['vms','disks','sql'].forEach(name => {
+      document.getElementById('tab-' + name).classList.toggle('hidden', name !== t.dataset.tab);
+    });
+  }));
+}
+
+function filtered() {
+  const sub = document.getElementById('fSub').value;
+  const env = document.getElementById('fEnv').value;
+  const os = document.getElementById('fOS').value;
+  const power = document.getElementById('fPower').value;
+  const loc = document.getElementById('fLoc').value;
+  return state.vms.filter(v =>
+    (!sub || v.Subscription === sub) &&
+    (!env || getEnv(v.Tags) === env) &&
+    (!os || v.OSType === os) &&
+    (!power || v.PowerState === power) &&
+    (!loc || v.Location === loc)
+  );
+}
+
+// ============================================================
+// KPIs
+// ============================================================
+function renderKPIs(rows) {
+  const total = rows.length;
+  const running = rows.filter(r => /running/i.test(r.PowerState)).length;
+  const stopped = total - running;
+  const cpu = rows.reduce((s,r) => s + num(r.CPUCores), 0);
+  const ram = rows.reduce((s,r) => s + num(r.RAM_GB), 0);
+  const storage = rows.reduce((s,r) => {
+    let total = num(r.OSDiskSizeGB);
+    const dd = String(r.DataDisks || '').matchAll(/\((\d+(?:\.\d+)?)GB/g);
+    for (const m of dd) total += num(m[1]);
+    return s + total;
+  }, 0);
+  const sqlVms = rows.filter(r => bool(r.SQLInstalled)).length;
+  const backupOn = rows.filter(r => bool(r.BackupEnabled)).length;
+  const backupPct = total ? Math.round(backupOn / total * 100) : 0;
+  const pendingReboot = rows.filter(r => bool(r.PendingReboot)).length;
+
+  const kpis = [
+    { label: 'Total VMs', value: total, sub: `${running} running / ${stopped} stopped`, accent: '#34d399' },
+    { label: 'vCPU (sum)', value: cpu, sub: 'cores', accent: '#22d3ee' },
+    { label: 'RAM (sum)', value: fmt(ram), sub: 'GB', accent: '#a78bfa' },
+    { label: 'Storage', value: fmt(storage), sub: 'GB provisioned', accent: '#fbbf24' },
+    { label: 'SQL Servers', value: sqlVms, sub: `${state.sql.length} instances`, accent: '#fb7185' },
+    { label: 'Backup Coverage', value: backupPct + '%', sub: `${backupOn}/${total} protected`, accent: '#60a5fa' },
+    { label: 'Pending Reboot', value: pendingReboot, sub: 'VMs need restart', accent: pendingReboot ? '#fb923c' : '#6b7280' },
+  ];
+  const grid = document.getElementById('kpiGrid');
+  grid.innerHTML = kpis.map(k => `
+    <div class="kpi" style="--accent:${k.accent}">
+      <div class="kpi-label">${k.label}</div>
+      <div class="kpi-value">${k.value}</div>
+      <div class="kpi-sub">${k.sub}</div>
+    </div>`).join('');
+}
+
+// ============================================================
+// Charts
+// ============================================================
+function destroyChart(id) { if (state.charts[id]) { state.charts[id].destroy(); delete state.charts[id]; } }
+
+function tally(rows, key, transform) {
+  const m = new Map();
+  rows.forEach(r => {
+    let k = transform ? transform(r) : r[key];
+    if (k === '' || k === null || k === undefined) k = '(none)';
+    m.set(k, (m.get(k) || 0) + 1);
+  });
+  return [...m.entries()].sort((a,b) => b[1] - a[1]);
+}
+
+function barChart(id, data, color, horizontal) {
+  destroyChart(id);
+  const ctx = document.getElementById(id).getContext('2d');
+  state.charts[id] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: data.map(d => d[0]),
+      datasets: [{
+        data: data.map(d => d[1]),
+        backgroundColor: color,
+        borderRadius: 3,
+        barThickness: 'flex',
+        maxBarThickness: 24
+      }]
+    },
+    options: {
+      indexAxis: horizontal ? 'y' : 'x',
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: gridColor, drawBorder: false }, ticks: { font: { size: 10 } } },
+        y: { grid: { color: gridColor, drawBorder: false }, ticks: { font: { size: 10 } } }
+      }
+    }
+  });
+}
+
+function donutChart(id, data) {
+  destroyChart(id);
+  const ctx = document.getElementById(id).getContext('2d');
+  state.charts[id] = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: data.map(d => d[0]),
+      datasets: [{
+        data: data.map(d => d[1]),
+        backgroundColor: palette,
+        borderColor: '#0f141c',
+        borderWidth: 2
+      }]
+    },
+    options: {
+      maintainAspectRatio: false,
+      cutout: '65%',
+      plugins: {
+        legend: { position: 'right', labels: { boxWidth: 10, font: { size: 11 }, padding: 10 } }
+      }
+    }
+  });
+}
+
+function renderCharts(rows) {
+  const region = tally(rows, 'Location');
+  const size = tally(rows, 'VMSize').slice(0, 8);
+  const os = tally(rows, 'OSType');
+  const power = tally(rows, 'PowerState');
+  const backup = [
+    ['Protected', rows.filter(r => bool(r.BackupEnabled)).length],
+    ['Unprotected', rows.filter(r => !bool(r.BackupEnabled)).length]
+  ];
+  const storage = rows.map(r => {
+    let total = num(r.OSDiskSizeGB);
+    const dd = String(r.DataDisks || '').matchAll(/\((\d+(?:\.\d+)?)GB/g);
+    for (const m of dd) total += num(m[1]);
+    return [r.VMName || '(unnamed)', total];
+  }).sort((a,b) => b[1] - a[1]).slice(0, 10);
+
+  barChart('chartRegion', region, '#34d399');
+  barChart('chartSize', size, '#22d3ee');
+  donutChart('chartOS', os);
+  donutChart('chartPower', power);
+  donutChart('chartBackup', backup);
+  barChart('chartStorage', storage, '#fbbf24', true);
+
+  document.getElementById('meta-region').textContent = `${region.length} regions`;
+  document.getElementById('meta-size').textContent = `${tally(rows,'VMSize').length} unique SKUs`;
+}
+
+// ============================================================
+// Tables
+// ============================================================
+const vmCols = [
+  { k:'VMName', label:'VM Name' },
+  { k:'Hostname', label:'Hostname' },
+  { k:'PrivateIPs', label:'Private IP' },
+  { k:'OSType', label:'OS' },
+  { k:'VMSize', label:'Size' },
+  { k:'CPUCores', label:'vCPU' },
+  { k:'RAM_GB', label:'RAM' },
+  { k:'Location', label:'Region' },
+  { k:'PowerState', label:'State', render: (v) => pill(v, /running/i.test(v) ? 'ok' : /deallocated|stopped/i.test(v) ? 'neutral' : 'warn') },
+  { k:'SQLInstalled', label:'SQL', render: (v) => bool(v) ? pill('Yes','info') : pill('—','neutral') },
+  { k:'BackupEnabled', label:'Backup', render: (v) => bool(v) ? pill('On','ok') : pill('Off','err') },
+  { k:'PendingReboot', label:'Pending Reboot', render: (v) => bool(v) ? pill('Yes','warn') : pill('No','neutral') },
+  { k:'Subscription', label:'Subscription' },
+];
+function pill(text, kind) { return `<span class="pill pill-${kind}">${text}</span>`; }
+
+function renderTable() {
+  const rows = filtered();
+  const term = document.getElementById('searchVm').value.toLowerCase().trim();
+  let view = rows;
+  if (term) {
+    view = rows.filter(r => Object.values(r).some(v => String(v).toLowerCase().includes(term)));
+  }
+  if (state.sort.col) {
+    view = [...view].sort((a,b) => {
+      const av = a[state.sort.col], bv = b[state.sort.col];
+      const an = parseFloat(av), bn = parseFloat(bv);
+      if (!isNaN(an) && !isNaN(bn)) return (an - bn) * state.sort.dir;
+      return String(av).localeCompare(String(bv)) * state.sort.dir;
+    });
+  }
+  const head = '<thead><tr>' + vmCols.map(c =>
+    `<th data-col="${c.k}">${c.label}${state.sort.col === c.k ? `<span class="sort-arrow">${state.sort.dir === 1 ? '▲' : '▼'}</span>` : ''}</th>`
+  ).join('') + '</tr></thead>';
+  const body = '<tbody>' + view.map(r => '<tr>' + vmCols.map(c => {
+    const val = r[c.k] === '' || r[c.k] == null ? '—' : r[c.k];
+    return `<td>${c.render ? c.render(r[c.k]) : val}</td>`;
+  }).join('') + '</tr>').join('') + '</tbody>';
+  document.getElementById('vmTable').innerHTML = head + body;
+  document.getElementById('vmCount').textContent = `${view.length} of ${state.vms.length} rows`;
+
+  document.querySelectorAll('#vmTable th').forEach(th => th.addEventListener('click', () => {
+    const col = th.dataset.col;
+    if (state.sort.col === col) state.sort.dir *= -1;
+    else { state.sort.col = col; state.sort.dir = 1; }
+    renderTable();
+  }));
+}
+
+function renderDiskTable() {
+  const vmNames = new Set(filtered().map(r => r.VMName));
+  const view = state.disks.filter(d => vmNames.has(d.VMName));
+  if (state.disks.length === 0) {
+    document.getElementById('diskTable').innerHTML = '<tbody><tr><td class="empty-msg">No disk data in uploaded file.</td></tr></tbody>';
+    document.getElementById('diskCount').textContent = '';
+    return;
+  }
+  const cols = ['Subscription','VMName','DiskName','Role','SizeGB','SkuType','LUN','Encryption','Caching'];
+  const head = '<thead><tr>' + cols.map(c => `<th>${c}</th>`).join('') + '</tr></thead>';
+  const body = '<tbody>' + view.map(r => '<tr>' + cols.map(c => `<td>${r[c] === '' || r[c] == null ? '—' : r[c]}</td>`).join('') + '</tr>').join('') + '</tbody>';
+  document.getElementById('diskTable').innerHTML = head + body;
+  document.getElementById('diskCount').textContent = `${view.length} disks across ${vmNames.size} VMs`;
+}
+
+function renderSqlTable() {
+  const vmNames = new Set(filtered().map(r => r.VMName));
+  const view = state.sql.filter(s => vmNames.has(s.VMName));
+  if (state.sql.length === 0) {
+    document.getElementById('sqlTable').innerHTML = '<tbody><tr><td class="empty-msg">No SQL data in uploaded file.</td></tr></tbody>';
+    document.getElementById('sqlCount').textContent = '';
+    return;
+  }
+  const cols = ['Subscription','VMName','Hostname','Instance','Edition','Version','PatchLevel','ServiceState','Databases'];
+  const head = '<thead><tr>' + cols.map(c => `<th>${c}</th>`).join('') + '</tr></thead>';
+  const body = '<tbody>' + view.map(r => '<tr>' + cols.map(c => {
+    let v = r[c] === '' || r[c] == null ? '—' : r[c];
+    if (c === 'ServiceState') return `<td>${/running|active/i.test(v) ? pill(v,'ok') : pill(v,'neutral')}</td>`;
+    return `<td>${v}</td>`;
+  }).join('') + '</tr>').join('') + '</tbody>';
+  document.getElementById('sqlTable').innerHTML = head + body;
+  document.getElementById('sqlCount').textContent = `${view.length} SQL instances on ${new Set(view.map(s=>s.VMName)).size} VMs`;
+}
+
+// ============================================================
+// Export
+// ============================================================
+function exportFiltered() {
+  const rows = filtered();
+  if (rows.length === 0) { alert('No rows to export.'); return; }
+  const headers = Object.keys(rows[0]);
+  const csv = [headers.join(',')].concat(
+    rows.map(r => headers.map(h => {
+      const v = r[h] == null ? '' : String(r[h]);
+      return /[",\n]/.test(v) ? `"${v.replace(/"/g,'""')}"` : v;
+    }).join(','))
+  ).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `azure_vm_inventory_filtered_${Date.now()}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ============================================================
+// Render orchestrator
+// ============================================================
+function renderAll() {
+  const rows = filtered();
+  renderKPIs(rows);
+  renderCharts(rows);
+  renderTable();
+  renderDiskTable();
+  renderSqlTable();
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,452 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "# Azure VM Inventory\n\nLive inventory of all Virtual Machines across selected subscriptions. Data is sourced from **Azure Resource Graph** in real time — no agents, no scripts, no storage account needed. Use the filters below to scope the view, then pin any tile to your Azure Dashboard with the pin icon (top-right of each section)."
+      },
+      "name": "title"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          {
+            "id": "p-sub",
+            "version": "KqlParameterItem/1.0",
+            "name": "Subscriptions",
+            "type": 6,
+            "isRequired": true,
+            "multiSelect": true,
+            "quote": "'",
+            "delimiter": ",",
+            "typeSettings": {
+              "additionalResourceOptions": ["value::all"],
+              "includeAll": true
+            },
+            "value": ["value::all"]
+          },
+          {
+            "id": "p-rg",
+            "version": "KqlParameterItem/1.0",
+            "name": "ResourceGroups",
+            "type": 2,
+            "multiSelect": true,
+            "quote": "'",
+            "delimiter": ",",
+            "typeSettings": {
+              "additionalResourceOptions": ["value::all"],
+              "includeAll": true
+            },
+            "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines'\n| where subscriptionId in~ ({Subscriptions}) or '*' in ({Subscriptions})\n| distinct resourceGroup\n| order by resourceGroup asc",
+            "crossComponentResources": ["{Subscriptions}"],
+            "queryType": 9,
+            "resourceType": "microsoft.resourcegraph/resources",
+            "value": ["value::all"]
+          },
+          {
+            "id": "p-loc",
+            "version": "KqlParameterItem/1.0",
+            "name": "Locations",
+            "type": 2,
+            "multiSelect": true,
+            "quote": "'",
+            "delimiter": ",",
+            "typeSettings": {
+              "additionalResourceOptions": ["value::all"],
+              "includeAll": true
+            },
+            "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines'\n| where subscriptionId in~ ({Subscriptions}) or '*' in ({Subscriptions})\n| distinct location\n| order by location asc",
+            "crossComponentResources": ["{Subscriptions}"],
+            "queryType": 9,
+            "resourceType": "microsoft.resourcegraph/resources",
+            "value": ["value::all"]
+          },
+          {
+            "id": "p-os",
+            "version": "KqlParameterItem/1.0",
+            "name": "OSType",
+            "label": "OS Type",
+            "type": 2,
+            "multiSelect": true,
+            "quote": "'",
+            "delimiter": ",",
+            "typeSettings": {
+              "additionalResourceOptions": ["value::all"],
+              "includeAll": true
+            },
+            "jsonData": "[\"Windows\",\"Linux\"]",
+            "value": ["value::all"]
+          },
+          {
+            "id": "p-power",
+            "version": "KqlParameterItem/1.0",
+            "name": "PowerState",
+            "label": "Power State",
+            "type": 2,
+            "multiSelect": true,
+            "quote": "'",
+            "delimiter": ",",
+            "typeSettings": {
+              "additionalResourceOptions": ["value::all"],
+              "includeAll": true
+            },
+            "jsonData": "[\"VM running\",\"VM deallocated\",\"VM stopped\",\"VM starting\",\"VM stopping\"]",
+            "value": ["value::all"]
+          }
+        ],
+        "style": "pills",
+        "queryType": 9,
+        "resourceType": "microsoft.resourcegraph/resources"
+      },
+      "name": "parameters"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## Summary"
+      },
+      "name": "summary-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines'\n| where (subscriptionId in~ ({Subscriptions})) or ('*' in ({Subscriptions}))\n| where (resourceGroup in~ ({ResourceGroups})) or ('*' in ({ResourceGroups}))\n| where (location in~ ({Locations})) or ('*' in ({Locations}))\n| extend osType = tostring(properties.storageProfile.osDisk.osType)\n| where (osType in~ ({OSType})) or ('*' in ({OSType}))\n| extend powerState = tostring(properties.extended.instanceView.powerState.displayStatus)\n| where (powerState in~ ({PowerState})) or ('*' in ({PowerState}))\n| extend osDiskGB = toint(properties.storageProfile.osDisk.diskSizeGB)\n| extend dataDiskGB = toint(array_sum(extract_all(@'\"diskSizeGB\":\\s*(\\d+)', tostring(properties.storageProfile.dataDisks))))\n| summarize\n    ['Total VMs'] = count(),\n    ['Running'] = countif(powerState =~ 'VM running'),\n    ['Stopped/Deallocated'] = countif(powerState !~ 'VM running'),\n    ['Windows'] = countif(osType =~ 'Windows'),\n    ['Linux'] = countif(osType =~ 'Linux'),\n    ['OS Disk (GB)'] = sum(osDiskGB),\n    ['Data Disk (GB)'] = sum(dataDiskGB)",
+        "size": 3,
+        "queryType": 9,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": ["{Subscriptions}"],
+        "visualization": "tiles",
+        "tileSettings": {
+          "showBorder": true,
+          "titleContent": {
+            "columnMatch": ".*",
+            "formatter": 12
+          }
+        }
+      },
+      "customWidth": "100",
+      "name": "kpi-tiles"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## Distribution"
+      },
+      "name": "dist-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines'\n| where (subscriptionId in~ ({Subscriptions})) or ('*' in ({Subscriptions}))\n| where (resourceGroup in~ ({ResourceGroups})) or ('*' in ({ResourceGroups}))\n| where (location in~ ({Locations})) or ('*' in ({Locations}))\n| extend osType = tostring(properties.storageProfile.osDisk.osType)\n| where (osType in~ ({OSType})) or ('*' in ({OSType}))\n| extend powerState = tostring(properties.extended.instanceView.powerState.displayStatus)\n| where (powerState in~ ({PowerState})) or ('*' in ({PowerState}))\n| summarize Count = count() by Location = location\n| order by Count desc",
+        "size": 0,
+        "title": "VMs by Region",
+        "queryType": 9,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": ["{Subscriptions}"],
+        "visualization": "barchart"
+      },
+      "customWidth": "50",
+      "name": "chart-region"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines'\n| where (subscriptionId in~ ({Subscriptions})) or ('*' in ({Subscriptions}))\n| where (resourceGroup in~ ({ResourceGroups})) or ('*' in ({ResourceGroups}))\n| where (location in~ ({Locations})) or ('*' in ({Locations}))\n| extend osType = tostring(properties.storageProfile.osDisk.osType)\n| where (osType in~ ({OSType})) or ('*' in ({OSType}))\n| extend powerState = tostring(properties.extended.instanceView.powerState.displayStatus)\n| where (powerState in~ ({PowerState})) or ('*' in ({PowerState}))\n| summarize Count = count() by VMSize = tostring(properties.hardwareProfile.vmSize)\n| order by Count desc\n| take 10",
+        "size": 0,
+        "title": "Top 10 VM Sizes (SKUs)",
+        "queryType": 9,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": ["{Subscriptions}"],
+        "visualization": "barchart"
+      },
+      "customWidth": "50",
+      "name": "chart-size"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines'\n| where (subscriptionId in~ ({Subscriptions})) or ('*' in ({Subscriptions}))\n| where (resourceGroup in~ ({ResourceGroups})) or ('*' in ({ResourceGroups}))\n| where (location in~ ({Locations})) or ('*' in ({Locations}))\n| extend osType = tostring(properties.storageProfile.osDisk.osType),\n         offer = tostring(properties.storageProfile.imageReference.offer),\n         sku = tostring(properties.storageProfile.imageReference.sku)\n| where (osType in~ ({OSType})) or ('*' in ({OSType}))\n| extend powerState = tostring(properties.extended.instanceView.powerState.displayStatus)\n| where (powerState in~ ({PowerState})) or ('*' in ({PowerState}))\n| extend OSImage = strcat(offer, ' / ', sku)\n| summarize Count = count() by OSImage\n| order by Count desc",
+        "size": 0,
+        "title": "OS Image Distribution",
+        "queryType": 9,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": ["{Subscriptions}"],
+        "visualization": "piechart"
+      },
+      "customWidth": "50",
+      "name": "chart-os"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines'\n| where (subscriptionId in~ ({Subscriptions})) or ('*' in ({Subscriptions}))\n| where (resourceGroup in~ ({ResourceGroups})) or ('*' in ({ResourceGroups}))\n| where (location in~ ({Locations})) or ('*' in ({Locations}))\n| extend osType = tostring(properties.storageProfile.osDisk.osType)\n| where (osType in~ ({OSType})) or ('*' in ({OSType}))\n| extend powerState = tostring(properties.extended.instanceView.powerState.displayStatus)\n| where (powerState in~ ({PowerState})) or ('*' in ({PowerState}))\n| summarize Count = count() by PowerState = powerState\n| order by Count desc",
+        "size": 0,
+        "title": "Power State",
+        "queryType": 9,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": ["{Subscriptions}"],
+        "visualization": "piechart"
+      },
+      "customWidth": "50",
+      "name": "chart-power"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## VM Inventory\n\nFull list with size, OS, network, disk and license details. Click any row to drill into the VM resource in the portal."
+      },
+      "name": "vm-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines'\n| where (subscriptionId in~ ({Subscriptions})) or ('*' in ({Subscriptions}))\n| where (resourceGroup in~ ({ResourceGroups})) or ('*' in ({ResourceGroups}))\n| where (location in~ ({Locations})) or ('*' in ({Locations}))\n| extend osType = tostring(properties.storageProfile.osDisk.osType)\n| where (osType in~ ({OSType})) or ('*' in ({OSType}))\n| extend powerState = tostring(properties.extended.instanceView.powerState.displayStatus)\n| where (powerState in~ ({PowerState})) or ('*' in ({PowerState}))\n| extend vmSize = tostring(properties.hardwareProfile.vmSize),\n         offer = tostring(properties.storageProfile.imageReference.offer),\n         sku = tostring(properties.storageProfile.imageReference.sku),\n         osDiskName = tostring(properties.storageProfile.osDisk.name),\n         osDiskGB = toint(properties.storageProfile.osDisk.diskSizeGB),\n         dataDiskCount = array_length(properties.storageProfile.dataDisks),\n         dataDiskGB = toint(array_sum(extract_all(@'\"diskSizeGB\":\\s*(\\d+)', tostring(properties.storageProfile.dataDisks)))),\n         licenseType = tostring(properties.licenseType),\n         zones = tostring(zones),\n         availSet = tostring(properties.availabilitySet.id),\n         identity = tostring(identity.type),\n         nicId = tostring(properties.networkProfile.networkInterfaces[0].id),\n         createdTime = tostring(properties.timeCreated)\n| project ['VM Name']=name, Subscription=subscriptionId, ['Resource Group']=resourceGroup, Location=location, Zone=zones, ['Size']=vmSize, ['OS']=osType, ['Image']=strcat(offer,' / ',sku), ['Power']=powerState, ['OS Disk']=osDiskName, ['OS GB']=osDiskGB, ['Data Disks']=dataDiskCount, ['Data GB']=dataDiskGB, ['License']=licenseType, ['Identity']=identity, ['Created']=createdTime, Tags=tags, ['Resource Id']=id\n| order by ['VM Name'] asc",
+        "size": 0,
+        "showAnalytics": true,
+        "showExportToExcel": true,
+        "queryType": 9,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": ["{Subscriptions}"],
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "Power",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  { "operator": "==", "thresholdValue": "VM running", "representation": "success", "text": "{0}" },
+                  { "operator": "==", "thresholdValue": "VM deallocated", "representation": "stopped", "text": "{0}" },
+                  { "operator": "==", "thresholdValue": "VM stopped", "representation": "stopped", "text": "{0}" },
+                  { "operator": "Default", "thresholdValue": null, "representation": "warning", "text": "{0}" }
+                ]
+              }
+            },
+            {
+              "columnMatch": "Resource Id",
+              "formatter": 7,
+              "formatOptions": {
+                "linkTarget": "Resource",
+                "linkLabel": "Open"
+              }
+            },
+            {
+              "columnMatch": "OS",
+              "formatter": 11
+            }
+          ],
+          "filter": true,
+          "rowLimit": 1000
+        }
+      },
+      "name": "vm-table"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## Disks\n\nAll managed disks attached to the filtered VMs (OS + data), with SKU, size and encryption settings."
+      },
+      "name": "disk-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type =~ 'microsoft.compute/disks'\n| where (subscriptionId in~ ({Subscriptions})) or ('*' in ({Subscriptions}))\n| where (resourceGroup in~ ({ResourceGroups})) or ('*' in ({ResourceGroups}))\n| where (location in~ ({Locations})) or ('*' in ({Locations}))\n| extend attachedVM = tostring(split(tostring(managedBy), '/')[-1]),\n         sizeGB = toint(properties.diskSizeGB),\n         skuName = tostring(sku.name),\n         skuTier = tostring(sku.tier),\n         diskState = tostring(properties.diskState),\n         encryptionType = tostring(properties.encryption.type),\n         createdTime = tostring(properties.timeCreated)\n| project ['Disk Name']=name, ['Attached VM']=attachedVM, ['Resource Group']=resourceGroup, Location=location, ['Size GB']=sizeGB, SKU=skuName, Tier=skuTier, State=diskState, Encryption=encryptionType, Created=createdTime, Subscription=subscriptionId\n| order by ['Size GB'] desc",
+        "size": 0,
+        "showExportToExcel": true,
+        "queryType": 9,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": ["{Subscriptions}"],
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "State",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  { "operator": "==", "thresholdValue": "Attached", "representation": "success", "text": "{0}" },
+                  { "operator": "==", "thresholdValue": "Unattached", "representation": "warning", "text": "{0}" },
+                  { "operator": "Default", "thresholdValue": null, "representation": "info", "text": "{0}" }
+                ]
+              }
+            },
+            {
+              "columnMatch": "Size GB",
+              "formatter": 4,
+              "formatOptions": {
+                "palette": "blue"
+              }
+            }
+          ],
+          "filter": true,
+          "rowLimit": 1000
+        }
+      },
+      "name": "disk-table"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## Network — NICs & IP Addresses"
+      },
+      "name": "net-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type =~ 'microsoft.network/networkinterfaces'\n| where (subscriptionId in~ ({Subscriptions})) or ('*' in ({Subscriptions}))\n| where (resourceGroup in~ ({ResourceGroups})) or ('*' in ({ResourceGroups}))\n| where (location in~ ({Locations})) or ('*' in ({Locations}))\n| extend vmId = tostring(properties.virtualMachine.id),\n         vmName = tostring(split(tostring(properties.virtualMachine.id), '/')[-1]),\n         privateIp = tostring(properties.ipConfigurations[0].properties.privateIPAddress),\n         publicIpId = tostring(properties.ipConfigurations[0].properties.publicIPAddress.id),\n         subnetId = tostring(properties.ipConfigurations[0].properties.subnet.id),\n         nsgId = tostring(properties.networkSecurityGroup.id),\n         macAddress = tostring(properties.macAddress),\n         acceleratedNetworking = tostring(properties.enableAcceleratedNetworking)\n| where isnotempty(vmName)\n| extend vnet = tostring(split(subnetId, '/')[8]),\n         subnet = tostring(split(subnetId, '/')[-1]),\n         nsg = tostring(split(nsgId, '/')[-1]),\n         publicIp = tostring(split(publicIpId, '/')[-1])\n| project ['VM']=vmName, ['NIC']=name, ['Private IP']=privateIp, ['Public IP']=publicIp, VNet=vnet, Subnet=subnet, NSG=nsg, ['Accel. Net']=acceleratedNetworking, MAC=macAddress, Location=location, Subscription=subscriptionId\n| order by ['VM'] asc",
+        "size": 0,
+        "showExportToExcel": true,
+        "queryType": 9,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": ["{Subscriptions}"],
+        "visualization": "table",
+        "gridSettings": {
+          "filter": true,
+          "rowLimit": 1000
+        }
+      },
+      "name": "nic-table"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## SQL Server VMs\n\nVMs deployed from SQL Server Marketplace images or registered with the SQL VM resource provider. Pure Linux SQL or self-installed SQL on Windows requires Log Analytics (see notes below)."
+      },
+      "name": "sql-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type =~ 'microsoft.sqlvirtualmachine/sqlvirtualmachines'\n| where (subscriptionId in~ ({Subscriptions})) or ('*' in ({Subscriptions}))\n| where (resourceGroup in~ ({ResourceGroups})) or ('*' in ({ResourceGroups}))\n| extend sqlImageOffer = tostring(properties.sqlImageOffer),\n         sqlImageSku = tostring(properties.sqlImageSku),\n         sqlMgmtType = tostring(properties.sqlManagement),\n         sqlServerLicenseType = tostring(properties.sqlServerLicenseType),\n         vmName = name\n| join kind=leftouter (\n    Resources\n    | where type =~ 'microsoft.compute/virtualmachines'\n    | extend vmSize = tostring(properties.hardwareProfile.vmSize),\n             powerState = tostring(properties.extended.instanceView.powerState.displayStatus),\n             osDiskGB = toint(properties.storageProfile.osDisk.diskSizeGB)\n    | project vmName=name, vmSize, powerState, osDiskGB, resourceGroup, vmLocation=location\n) on vmName\n| project ['VM Name']=vmName, ['Resource Group']=resourceGroup, ['Location']=vmLocation, ['Size']=vmSize, ['Power']=powerState, ['SQL Edition']=sqlImageSku, ['SQL Image']=sqlImageOffer, ['Management']=sqlMgmtType, ['License']=sqlServerLicenseType, ['Subscription']=subscriptionId\n| order by ['VM Name'] asc",
+        "size": 0,
+        "showExportToExcel": true,
+        "queryType": 9,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": ["{Subscriptions}"],
+        "visualization": "table",
+        "gridSettings": {
+          "filter": true,
+          "rowLimit": 500
+        }
+      },
+      "name": "sql-table"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## Backup Protection Status"
+      },
+      "name": "backup-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "RecoveryServicesResources\n| where type =~ 'microsoft.recoveryservices/vaults/backupfabrics/protectioncontainers/protecteditems'\n| where (subscriptionId in~ ({Subscriptions})) or ('*' in ({Subscriptions}))\n| where properties.backupManagementType == 'AzureIaasVM'\n| extend vmId = tostring(properties.virtualMachineId),\n         vmName = tostring(split(tostring(properties.virtualMachineId), '/')[-1]),\n         policyName = tostring(properties.policyName),\n         protectionState = tostring(properties.protectionState),\n         lastBackupStatus = tostring(properties.lastBackupStatus),\n         lastBackupTime = tostring(properties.lastBackupTime),\n         lastRecoveryPoint = tostring(properties.lastRecoveryPoint),\n         vaultName = tostring(split(id, '/')[8])\n| project ['VM Name']=vmName, ['Vault']=vaultName, ['Policy']=policyName, ['Protection']=protectionState, ['Last Backup Status']=lastBackupStatus, ['Last Backup Time']=lastBackupTime, ['Last Recovery Point']=lastRecoveryPoint, ['Subscription']=subscriptionId\n| order by ['Last Backup Time'] desc",
+        "size": 0,
+        "showExportToExcel": true,
+        "queryType": 9,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": ["{Subscriptions}"],
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "Last Backup Status",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  { "operator": "==", "thresholdValue": "Completed", "representation": "success", "text": "{0}" },
+                  { "operator": "==", "thresholdValue": "Healthy", "representation": "success", "text": "{0}" },
+                  { "operator": "==", "thresholdValue": "CompletedWithWarnings", "representation": "warning", "text": "{0}" },
+                  { "operator": "==", "thresholdValue": "Failed", "representation": "failed", "text": "{0}" },
+                  { "operator": "Default", "thresholdValue": null, "representation": "info", "text": "{0}" }
+                ]
+              }
+            }
+          ],
+          "filter": true,
+          "rowLimit": 1000
+        }
+      },
+      "name": "backup-table"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## Unprotected VMs (no backup configured)"
+      },
+      "name": "unprotected-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines'\n| where (subscriptionId in~ ({Subscriptions})) or ('*' in ({Subscriptions}))\n| where (resourceGroup in~ ({ResourceGroups})) or ('*' in ({ResourceGroups}))\n| where (location in~ ({Locations})) or ('*' in ({Locations}))\n| project vmId = tolower(id), vmName = name, resourceGroup, location, subscriptionId\n| join kind=leftanti (\n    RecoveryServicesResources\n    | where type =~ 'microsoft.recoveryservices/vaults/backupfabrics/protectioncontainers/protecteditems'\n    | where properties.backupManagementType == 'AzureIaasVM'\n    | extend vmId = tolower(tostring(properties.virtualMachineId))\n    | project vmId\n) on vmId\n| project ['VM Name']=vmName, ['Resource Group']=resourceGroup, ['Location']=location, ['Subscription']=subscriptionId\n| order by ['VM Name'] asc",
+        "size": 0,
+        "showExportToExcel": true,
+        "queryType": 9,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": ["{Subscriptions}"],
+        "visualization": "table",
+        "gridSettings": {
+          "filter": true,
+          "rowLimit": 1000
+        }
+      },
+      "name": "unprotected-table"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## Public IP Exposure"
+      },
+      "name": "pip-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type =~ 'microsoft.network/publicipaddresses'\n| where (subscriptionId in~ ({Subscriptions})) or ('*' in ({Subscriptions}))\n| where isnotempty(properties.ipAddress)\n| extend assocId = tostring(properties.ipConfiguration.id),\n         ip = tostring(properties.ipAddress),\n         allocation = tostring(properties.publicIPAllocationMethod),\n         sku = tostring(sku.name)\n| where isnotempty(assocId)\n| extend assocType = case(\n    assocId contains '/networkInterfaces/', 'VM (via NIC)',\n    assocId contains '/loadBalancers/', 'Load Balancer',\n    assocId contains '/applicationGateways/', 'App Gateway',\n    assocId contains '/bastionHosts/', 'Bastion',\n    assocId contains '/azureFirewalls/', 'Firewall',\n    'Other')\n| extend nicName = iff(assocType == 'VM (via NIC)', tostring(split(assocId, '/')[-3]), '')\n| project ['Public IP']=ip, Allocation=allocation, SKU=sku, ['Associated With']=assocType, ['NIC / Resource']=nicName, ['Resource Group']=resourceGroup, Location=location, Subscription=subscriptionId\n| order by ['Public IP'] asc",
+        "size": 0,
+        "showExportToExcel": true,
+        "queryType": 9,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": ["{Subscriptions}"],
+        "visualization": "table",
+        "gridSettings": {
+          "filter": true,
+          "rowLimit": 500
+        }
+      },
+      "name": "pip-table"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "---\n\n### Notes & limitations\n\n- **Source:** This workbook is powered entirely by **Azure Resource Graph**, which only contains *Azure-level* metadata about VMs. It does **not** include in-guest data such as the OS computer name, drive letters, free space, installed software, or SQL databases.\n- **To add in-guest data:** Onboard VMs to **Azure Monitor Agent (AMA)** with a **Log Analytics workspace** and enable **VM Insights** + the **ChangeTracking** solution. You can then add tabs to this workbook with KQL queries against tables like `Heartbeat`, `InsightsMetrics`, `ConfigurationData`, and `ConfigurationChange` for hostnames, drives, services, and installed software. SQL instance/db inventory can be pulled from `MSSQL-IaaS-VM` solution or custom Run Command data.\n- **CPU / RAM per VM:** Resource Graph stores only the SKU name (e.g. `Standard_D4s_v5`). To resolve cores/RAM per SKU, either join client-side after export or maintain a static SKU lookup table. VM Insights surfaces this natively.\n- **Pin to Azure Dashboard:** Click the pin icon on any tile/chart/table to add it to a shared Azure Portal Dashboard.\n- **Required RBAC:** `Reader` on each subscription is enough for everything except backup, which also needs `Reader` on the Recovery Services vaults."
+      },
+      "name": "notes"
+    }
+  ],
+  "fallbackResourceIds": ["Azure Monitor"],
+  "fromTemplateId": "community-Workbooks/Azure-VM-Inventory/AzureVMInventory",
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}
