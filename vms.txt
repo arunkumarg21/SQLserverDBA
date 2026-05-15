@@ -1,0 +1,12 @@
+# Azure VM names to inventory — one per line
+# Lines starting with # are ignored. Blank lines are ignored.
+# Use the Azure VM resource name (case-insensitive).
+# The script will search every subscription you have access to and find them.
+
+vm-sql-prd-01
+vm-app-prd-02
+vm-web-prd-03
+vm-sql-dev-01
+
+# You can also put a comment inline after a # or ;
+vm-sql-prd-04   # production ERP database

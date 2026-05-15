@@ -1,0 +1,8 @@
+# Subscriptions to scan — one per line
+# Accepts subscription ID (GUID) OR subscription display name
+# Lines starting with # are ignored. Blank lines are ignored.
+
+# Examples:
+00000000-0000-0000-0000-000000000001
+Prod-Subscription
+Dev-Subscription
